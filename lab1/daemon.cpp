@@ -6,6 +6,8 @@
 #include <stdlib.h>    // Для exit()
 #include <iostream>
 #include <fstream>
+#include <syslog.h>
+#include <cstring>
 
 #include "daemon.hpp"
 
@@ -13,25 +15,30 @@
 void Daemon::start(){
 
     char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd)) != nullptr) {
-        std::cout << "Current working directory: " << cwd << std::endl;
-    } else {
-        std::cerr << "Error getting current directory." << std::endl;
+    if (getcwd(cwd, sizeof(cwd)) == nullptr) {
+        syslog(LOG_ERR, "cannot get current directory, error: %s", strerror(errno));
+        exit(EXIT_FAILURE);
     }
+
     current_path = std::string(cwd);
+
+    openlog("diy daemon", LOG_PID, LOG_DAEMON);
+
     read_config();
     daemonize();
     run();
 }
 
 void Daemon::read_config(){
+    syslog(LOG_INFO, "started reading config");
+    
     std::string path = current_path + std::string("config.txt");
 
     std::ifstream file(path);
 
     if (!file.is_open()) {
-        std::cerr << "Failed to open file: " << path << std::endl;
-        exit;
+        syslog(LOG_ERR, "Failed to open config.txt");
+        exit(EXIT_FAILURE);
     }
 
     std::getline(file, folder1_path);
@@ -45,10 +52,13 @@ void Daemon::read_config(){
 }
 
 void Daemon::daemonize(){
+    syslog(LOG_INFO, "started daemonizing");
+
     pid_t pid;
     pid = fork();
 
     if (pid < 0) {
+        syslog(LOG_ERR, "fork went wrong, error %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -57,6 +67,7 @@ void Daemon::daemonize(){
     }
 
     if (setsid() < 0) {
+        syslog(LOG_ERR, "setsid went wrong, error %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -84,7 +95,7 @@ void Daemon::appendTotalLog(std::vector<fs::path>& log_files){
     std::ofstream totalLog(current_path + std::string("total.log")); 
 
     if (!totalLog) {
-        std::cerr << "Error opening output file: " << current_path + std::string("total.log") << std::endl;
+        syslog(LOG_ERR, "cannot open total.log, error: %s", strerror(errno));
         return;
     }
 
@@ -92,7 +103,7 @@ void Daemon::appendTotalLog(std::vector<fs::path>& log_files){
         std::ifstream inputFile(filePath);
 
         if (!inputFile) {
-            std::cerr << "Error opening input file: " << filePath << std::endl;
+            syslog(LOG_ERR, "cannot open %s, error: %s", filePath, strerror(errno));
             continue;  
         }
 
@@ -112,7 +123,7 @@ void Daemon::removeLogs(std::vector<fs::path>& log_files) {
     
     for (const auto& entry : log_files) {
         if (entry.extension() == ".log") {
-            std::cout << "Removing directory: " << entry << std::endl;
+            syslog("Removing log: %s", entry);
             fs::remove(entry);  
         }
     }
