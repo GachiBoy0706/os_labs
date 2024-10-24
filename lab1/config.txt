@@ -1,0 +1,3 @@
+/home/gachiboy/Desktop/tests_for_lab1/test1
+/home/gachiboy/Desktop/tests_for_lab1/test2
+45
