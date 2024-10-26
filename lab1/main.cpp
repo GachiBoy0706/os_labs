@@ -1,5 +1,6 @@
 #include <iostream>
+#include "daemon.hpp"
 int main() {
-    std::cout << "__cplusplus: " << __cplusplus << std::endl;
+    Daemon::getInstance().start();
     return 0;
 }

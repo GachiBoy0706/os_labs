@@ -21,12 +21,15 @@ void Daemon::start(){
     }
 
     current_path = std::string(cwd);
-
-    openlog("diy daemon", LOG_PID, LOG_DAEMON);
+   
+    openlog("diy_daemon", LOG_PID, LOG_DAEMON);
 
     checkAndTerminateExistingProcess();
+    
     readConfig();
+    
     daemonize();
+    
     run();
 }
 
@@ -73,15 +76,16 @@ void Daemon::checkAndTerminateExistingProcess() {
 void Daemon::readConfig(){
     syslog(LOG_INFO, "started reading config");
     
-    std::string path = current_path + std::string("config.txt");
+    std::string path = current_path + std::string("/config.txt");
+    
 
     std::ifstream file(path);
 
     if (!file.is_open()) {
-        syslog(LOG_ERR, "Failed to open config.txt");
+        std::cout << path << std::endl;
         exit(EXIT_FAILURE);
     }
-
+   
     std::getline(file, folder1_path);
     std::getline(file, folder2_path);
     std::string line;
@@ -165,7 +169,7 @@ void Daemon::daemonize(){
 std::vector<fs::path> Daemon::findLogs(){
     std::vector<fs::path> log_files;  
 
-    for (const auto& entry : fs::recursive_directory_iterator(current_path)) {
+    for (const auto& entry : fs::recursive_directory_iterator(folder1_path)) {
         if (entry.is_regular_file() && entry.path().extension() == ".log") {
             log_files.push_back(entry.path()); 
         }
@@ -175,7 +179,7 @@ std::vector<fs::path> Daemon::findLogs(){
 }
 
 void Daemon::appendTotalLog(std::vector<fs::path>& log_files){
-    std::ofstream totalLog(current_path + std::string("total.log")); 
+    std::ofstream totalLog(folder2_path + std::string("/total.log"), std::ios::app); 
 
     if (!totalLog) {
         syslog(LOG_ERR, "cannot open total.log, error: %s", strerror(errno));

@@ -1,1 +1,0 @@
-/usr/bin/c++  -Wall -Werror CMakeFiles/daemon.dir/main.cpp.o CMakeFiles/daemon.dir/daemon.cpp.o -o daemon 
