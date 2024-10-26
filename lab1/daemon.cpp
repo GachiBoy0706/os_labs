@@ -24,12 +24,13 @@ void Daemon::start(){
 
     openlog("diy daemon", LOG_PID, LOG_DAEMON);
 
-    read_config();
+    readConfig();
     daemonize();
+    setupSignalHandlers();
     run();
 }
 
-void Daemon::read_config(){
+void Daemon::readConfig(){
     syslog(LOG_INFO, "started reading config");
     
     std::string path = current_path + std::string("config.txt");
@@ -76,7 +77,26 @@ void Daemon::daemonize(){
     chdir("/");
 }
 
-//maybe this must be in different file!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+void signalHandler(int signal){
+    switch (signal)
+    {
+        case SIGHUP:
+            syslog(LOG_INFO, "Rereading config file");
+            Daemon::getInstance().readConfig();
+            break;
+        case SIGTERM:
+            syslog(LOG_INFO, "Terminate session");
+            exit(EXIT_SUCCESS);
+            break;
+    }
+
+}
+
+void Daemon::setupSignalHandlers(){
+    signal(SIGHUP, signalHandler);
+    signal(SIGTERM, signalHandler);
+
+}
 
 
 std::vector<fs::path> Daemon::findLogs(){
@@ -103,7 +123,7 @@ void Daemon::appendTotalLog(std::vector<fs::path>& log_files){
         std::ifstream inputFile(filePath);
 
         if (!inputFile) {
-            syslog(LOG_ERR, "cannot open %s, error: %s", filePath, strerror(errno));
+            syslog(LOG_ERR, "cannot open %s, error: %s", filePath.string().c_str(), strerror(errno));
             continue;  
         }
 
@@ -123,13 +143,12 @@ void Daemon::removeLogs(std::vector<fs::path>& log_files) {
     
     for (const auto& entry : log_files) {
         if (entry.extension() == ".log") {
-            syslog("Removing log: %s", entry);
+            syslog(LOG_INFO, "Removing log: %s", entry.string().c_str());
             fs::remove(entry);  
         }
     }
 }
 
-//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
 void Daemon::run(){
