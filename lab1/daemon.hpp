@@ -34,9 +34,14 @@ class Daemon{
     std::vector<fs::path> findLogs();
     void appendTotalLog(std::vector<fs::path>&);
     void removeLogs(std::vector<fs::path>&);
-    void setupSignalHandlers();
 
     friend void signalHandler(int singal);
+
+    const char* pidFilePath = "/var/run/diy_daemon.pid";
+
+    bool createPidFile();
+    void removePidFile();
+    void checkAndTerminateExistingProcess();
 
     std::string current_path;
     std::string folder1_path;

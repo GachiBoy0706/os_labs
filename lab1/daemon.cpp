@@ -1,9 +1,9 @@
-#include <unistd.h>    // Для fork(), setsid(), sleep()
-#include <sys/types.h> // Для pid_t
-#include <sys/stat.h>  // Для umask()
-#include <signal.h>    // Для signal()
-#include <fcntl.h>     // Для open()
-#include <stdlib.h>    // Для exit()
+#include <unistd.h>    
+#include <sys/types.h> 
+#include <sys/stat.h>  
+#include <signal.h>    
+#include <fcntl.h>     
+#include <stdlib.h>    
 #include <iostream>
 #include <fstream>
 #include <syslog.h>
@@ -24,11 +24,51 @@ void Daemon::start(){
 
     openlog("diy daemon", LOG_PID, LOG_DAEMON);
 
+    checkAndTerminateExistingProcess();
     readConfig();
     daemonize();
-    setupSignalHandlers();
     run();
 }
+
+
+
+
+bool isProcessRunning(pid_t pid) {
+    std::string procPath = "/proc/" + std::to_string(pid);
+    struct stat sts;
+    return (stat(procPath.c_str(), &sts) == 0);
+}
+
+void terminateProcess(pid_t pid) {
+    if (kill(pid, SIGTERM) != 0) {
+        syslog(LOG_ERR, "couldn`t terminate process");
+    }
+}
+
+void Daemon::removePidFile() {
+    remove(pidFilePath);
+}
+
+void Daemon::checkAndTerminateExistingProcess() {
+    std::ifstream pidFile(pidFilePath);
+
+    if (pidFile.is_open()) {
+        pid_t existingPid;
+        pidFile >> existingPid;
+        pidFile.close();
+
+        if (isProcessRunning(existingPid)) {
+            syslog(LOG_INFO, "detected running process with PID: %i; terminating", existingPid);
+            terminateProcess(existingPid);
+            sleep(1);  
+        }
+
+        removePidFile();
+    }
+}
+
+
+
 
 void Daemon::readConfig(){
     syslog(LOG_INFO, "started reading config");
@@ -49,6 +89,36 @@ void Daemon::readConfig(){
     time = std::stoi(line); 
 
     file.close();
+
+}
+
+
+
+
+bool Daemon::createPidFile() {
+    std::ofstream pidFile(pidFilePath);
+    if (!pidFile.is_open()) {
+        syslog(LOG_ERR, "couldn`t create PID file");
+        return false;
+    }
+    pidFile << getpid();
+    pidFile.close();
+    return true;
+}
+
+void signalHandler(int signal){
+    switch (signal)
+    {
+        case SIGHUP:
+            syslog(LOG_INFO, "Rereading config file");
+            Daemon::getInstance().readConfig();
+            break;
+        case SIGTERM:
+            syslog(LOG_INFO, "Terminate session");
+            closelog();
+            exit(EXIT_SUCCESS);
+            break;
+    }
 
 }
 
@@ -75,28 +145,21 @@ void Daemon::daemonize(){
     signal(SIGHUP, SIG_IGN);
     umask(0);
     chdir("/");
-}
 
-void signalHandler(int signal){
-    switch (signal)
-    {
-        case SIGHUP:
-            syslog(LOG_INFO, "Rereading config file");
-            Daemon::getInstance().readConfig();
-            break;
-        case SIGTERM:
-            syslog(LOG_INFO, "Terminate session");
-            exit(EXIT_SUCCESS);
-            break;
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+
+    if (!createPidFile()) {
+        exit(EXIT_FAILURE);
     }
 
-}
-
-void Daemon::setupSignalHandlers(){
     signal(SIGHUP, signalHandler);
     signal(SIGTERM, signalHandler);
-
 }
+
+
+
 
 
 std::vector<fs::path> Daemon::findLogs(){
@@ -149,12 +212,7 @@ void Daemon::removeLogs(std::vector<fs::path>& log_files) {
     }
 }
 
-
-
 void Daemon::run(){
-    /*Удаляет все файлы “*.log” из папки 1, предварительно дописывая их содержимое в файл “total.log” папки 2 
-    (перед записью содержимого, в “total.log” добавляются две пустые строки, пишется имя обрабатываемого файла из папки 1, 
-    пропускается еще одна строка и уже потом записывается содержимое файла папки 1)*/
     
     std::vector<fs::path> log_files;
     
